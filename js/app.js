@@ -2,6 +2,10 @@
   "use strict";
 
   const STORAGE_KEY = "ezjp_vocab";
+  const WK_VOCAB_STORAGE = "ezjp_wk_vocab";
+  const WK_API_KEY_STORAGE = "ezjp_wk_api_key";
+  const WK_INCLUDE_KANJI_STORAGE = "ezjp_wk_include_kanji";
+  const WK_API_BASE = "https://api.wanikani.com/v2";
   const ARTICLES_URL = "data/articles.json";
 
   // DOM elements
@@ -18,14 +22,21 @@
 
   const PAGE_SIZE = 20;
   let articles = [];
-  let userVocab = new Set();
+  let manualVocab = new Set();  // Words from textarea/file upload
+  let wkVocab = new Set();      // Words from WaniKani (kept separate)
   let sortedArticles = [];
   let displayCount = PAGE_SIZE;
+
+  /** Combined vocab for scoring (manual + WaniKani) */
+  function getAllVocab() {
+    const combined = new Set(manualVocab);
+    for (const w of wkVocab) combined.add(w);
+    return combined;
+  }
 
   // --- Vocab Management ---
 
   function parseVocabText(text) {
-    // Handle one word per line, comma-separated, or tab-separated
     return text
       .split(/[\n,\t]+/)
       .map((w) => w.trim())
@@ -33,7 +44,6 @@
   }
 
   function parseCSVFirstColumn(text) {
-    // For CSV files, take the first column of each row
     const lines = text.split(/\n/);
     const words = [];
     for (const line of lines) {
@@ -47,14 +57,24 @@
   }
 
   function loadVocab() {
+    // Load manual vocab
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
         const words = JSON.parse(stored);
-        userVocab = new Set(words);
+        manualVocab = new Set(words);
         vocabInput.value = words.join("\n");
       } catch {
-        userVocab = new Set();
+        manualVocab = new Set();
+      }
+    }
+    // Load cached WaniKani vocab
+    const wkStored = localStorage.getItem(WK_VOCAB_STORAGE);
+    if (wkStored) {
+      try {
+        wkVocab = new Set(JSON.parse(wkStored));
+      } catch {
+        wkVocab = new Set();
       }
     }
     updateVocabStatus();
@@ -62,24 +82,40 @@
 
   function saveVocab() {
     const words = parseVocabText(vocabInput.value);
-    userVocab = new Set(words);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...userVocab]));
+    manualVocab = new Set(words);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...manualVocab]));
     updateVocabStatus();
     renderArticles();
   }
 
   function clearVocab() {
-    userVocab = new Set();
+    const hasWk = wkVocab.size > 0 || localStorage.getItem(WK_API_KEY_STORAGE);
+    const msg = hasWk
+      ? "This will clear your vocabulary, WaniKani words, and saved API key. Continue?"
+      : "This will clear all your vocabulary. Continue?";
+    if (!confirm(msg)) return;
+
+    manualVocab = new Set();
+    wkVocab = new Set();
     vocabInput.value = "";
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(WK_VOCAB_STORAGE);
+    localStorage.removeItem(WK_API_KEY_STORAGE);
+    localStorage.removeItem(WK_INCLUDE_KANJI_STORAGE);
     updateVocabStatus();
     renderArticles();
   }
 
   function updateVocabStatus() {
-    const count = userVocab.size;
-    if (count > 0) {
-      vocabStatus.textContent = `${count} words loaded`;
+    const manualCount = manualVocab.size;
+    const wkCount = wkVocab.size;
+    const totalCount = getAllVocab().size;
+
+    if (totalCount > 0) {
+      const parts = [];
+      if (manualCount > 0) parts.push(`${manualCount} words`);
+      if (wkCount > 0) parts.push(`${wkCount} from WaniKani`);
+      vocabStatus.textContent = parts.join(" + ");
       vocabStatus.className = "status-badge has-vocab";
     } else {
       vocabStatus.textContent = "No vocabulary loaded";
@@ -101,25 +137,185 @@
         words = parseVocabText(text);
       }
 
-      // Merge with existing vocab
       for (const w of words) {
-        userVocab.add(w);
+        manualVocab.add(w);
       }
-      vocabInput.value = [...userVocab].join("\n");
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...userVocab]));
+      vocabInput.value = [...manualVocab].join("\n");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...manualVocab]));
       updateVocabStatus();
       renderArticles();
     };
     reader.readAsText(file);
-    // Reset input so same file can be re-uploaded
     e.target.value = "";
+  }
+
+  // --- WaniKani Import ---
+
+  const wkImportBtn = document.getElementById("wanikani-import");
+  const wkModal = document.getElementById("wk-modal");
+  const wkApiKeyInput = document.getElementById("wk-api-key");
+  const wkIncludeKanji = document.getElementById("wk-include-kanji");
+  const wkStartBtn = document.getElementById("wk-start");
+  const wkCancelBtn = document.getElementById("wk-cancel");
+  const wkKeySection = document.getElementById("wk-key-section");
+  const wkProgressSection = document.getElementById("wk-progress-section");
+  const wkProgressFill = document.getElementById("wk-progress-fill");
+  const wkProgressText = document.getElementById("wk-progress-text");
+  const wkError = document.getElementById("wk-error");
+
+  function openWkModal() {
+    const savedKey = localStorage.getItem(WK_API_KEY_STORAGE);
+    if (savedKey) wkApiKeyInput.value = savedKey;
+    const savedKanji = localStorage.getItem(WK_INCLUDE_KANJI_STORAGE);
+    wkIncludeKanji.checked = savedKanji === "true";
+    wkKeySection.hidden = false;
+    wkProgressSection.hidden = true;
+    wkError.hidden = true;
+    wkStartBtn.disabled = false;
+    wkStartBtn.textContent = "Import";
+    wkStartBtn.onclick = null;
+    wkModal.classList.remove("wk-hidden");
+  }
+
+  function closeWkModal() {
+    wkModal.classList.add("wk-hidden");
+  }
+
+  function updateWkProgress(percent, text) {
+    wkProgressFill.style.width = `${Math.min(percent, 100)}%`;
+    wkProgressText.textContent = text;
+  }
+
+  function showWkError(message) {
+    wkError.textContent = message;
+    wkError.hidden = false;
+  }
+
+  async function wkFetch(url, apiKey) {
+    return fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+  }
+
+  /**
+   * Fetch WaniKani vocabulary. Called both from the modal and on page load.
+   * @param {string} apiKey - WaniKani API bearer token
+   * @param {boolean} includeKanji - whether to also import kanji
+   * @param {boolean} silent - if true, don't show modal progress (background refresh)
+   */
+  async function fetchWaniKaniVocab(apiKey, includeKanji, silent) {
+    const subjectTypes = includeKanji ? "vocabulary,kanji" : "vocabulary";
+
+    // Phase 1: Fetch all started assignments
+    if (!silent) updateWkProgress(0, "Fetching your learned items...");
+    const subjectIds = [];
+    let url = `${WK_API_BASE}/assignments?subject_types=${subjectTypes}&started=true`;
+
+    while (url) {
+      const resp = await wkFetch(url, apiKey);
+      if (!resp.ok) {
+        if (resp.status === 401) throw new Error("Invalid API token. Check your key at wanikani.com/settings.");
+        if (resp.status === 429) throw new Error("Rate limited by WaniKani. Please wait a moment and try again.");
+        throw new Error(`WaniKani API error (${resp.status}). Try again later.`);
+      }
+      const json = await resp.json();
+      for (const item of json.data) {
+        subjectIds.push(item.data.subject_id);
+      }
+      url = json.pages.next_url;
+      if (!silent) updateWkProgress(20, `Found ${subjectIds.length} learned items...`);
+    }
+
+    if (subjectIds.length === 0) {
+      throw new Error("No learned vocabulary found on your WaniKani account.");
+    }
+
+    // Phase 2: Fetch subjects in batches of 1000
+    const words = [];
+    const batchSize = 1000;
+    for (let i = 0; i < subjectIds.length; i += batchSize) {
+      const batch = subjectIds.slice(i, i + batchSize);
+      let batchUrl = `${WK_API_BASE}/subjects?ids=${batch.join(",")}`;
+
+      while (batchUrl) {
+        const resp = await wkFetch(batchUrl, apiKey);
+        if (!resp.ok) throw new Error(`WaniKani API error (${resp.status}). Try again later.`);
+        const json = await resp.json();
+        for (const item of json.data) {
+          if (item.data.characters) {
+            words.push(item.data.characters);
+          }
+        }
+        batchUrl = json.pages.next_url;
+      }
+
+      if (!silent) {
+        const pct = 20 + ((i + batch.length) / subjectIds.length) * 80;
+        updateWkProgress(pct, `Fetching vocabulary... ${words.length} words`);
+      }
+    }
+
+    return words;
+  }
+
+  async function importFromWaniKani() {
+    const apiKey = wkApiKeyInput.value.trim();
+    if (!apiKey) {
+      showWkError("Please enter your API token.");
+      return;
+    }
+
+    localStorage.setItem(WK_API_KEY_STORAGE, apiKey);
+    localStorage.setItem(WK_INCLUDE_KANJI_STORAGE, wkIncludeKanji.checked.toString());
+    wkKeySection.hidden = true;
+    wkProgressSection.hidden = false;
+    wkError.hidden = true;
+    wkStartBtn.disabled = true;
+
+    try {
+      const words = await fetchWaniKaniVocab(apiKey, wkIncludeKanji.checked, false);
+
+      // Store WaniKani vocab separately
+      wkVocab = new Set(words);
+      localStorage.setItem(WK_VOCAB_STORAGE, JSON.stringify([...wkVocab]));
+      updateVocabStatus();
+      renderArticles();
+
+      updateWkProgress(100, `Imported ${words.length} words from WaniKani!`);
+      wkStartBtn.textContent = "Done";
+      wkStartBtn.disabled = false;
+      wkStartBtn.onclick = closeWkModal;
+    } catch (err) {
+      showWkError(err.message);
+      wkKeySection.hidden = false;
+      wkProgressSection.hidden = true;
+      wkStartBtn.disabled = false;
+    }
+  }
+
+  /** Silently refresh WaniKani vocab on page load if API key is saved */
+  async function refreshWaniKaniOnLoad() {
+    const apiKey = localStorage.getItem(WK_API_KEY_STORAGE);
+    if (!apiKey) return;
+
+    const includeKanji = localStorage.getItem(WK_INCLUDE_KANJI_STORAGE) === "true";
+    try {
+      const words = await fetchWaniKaniVocab(apiKey, includeKanji, true);
+      wkVocab = new Set(words);
+      localStorage.setItem(WK_VOCAB_STORAGE, JSON.stringify([...wkVocab]));
+      updateVocabStatus();
+      renderArticles();
+    } catch {
+      // Silent fail — use cached WaniKani vocab from localStorage
+    }
   }
 
   // --- Article Scoring ---
 
   function scoreArticle(article) {
-    if (userVocab.size === 0) return 0;
-    const knownCount = article.words.filter((w) => userVocab.has(w)).length;
+    const vocab = getAllVocab();
+    if (vocab.size === 0) return 0;
+    const knownCount = article.words.filter((w) => vocab.has(w)).length;
     return (knownCount / article.word_count) * 100;
   }
 
@@ -135,7 +331,8 @@
     articlesLoading.hidden = true;
     displayCount = PAGE_SIZE;
 
-    if (userVocab.size === 0) {
+    const vocab = getAllVocab();
+    if (vocab.size === 0) {
       noVocabMessage.hidden = false;
       sortedArticles = [...articles];
     } else {
@@ -156,7 +353,8 @@
 
   function renderPage() {
     articlesList.innerHTML = "";
-    const hasVocab = userVocab.size > 0;
+    const vocab = getAllVocab();
+    const hasVocab = vocab.size > 0;
     for (const article of sortedArticles.slice(0, displayCount)) {
       articlesList.appendChild(createArticleCard(article, hasVocab ? article.score : null));
     }
@@ -278,7 +476,6 @@
     const dy = -(Math.random() * 40 + 20);
     heart.style.setProperty("--dx", dx + "px");
     heart.style.setProperty("--dy", dy + "px");
-    // Spawn from center of the ♥ character (~2px from left edge)
     heart.style.left = (rect.left + 2) + "px";
     heart.style.top = (rect.top - 5) + "px";
     document.body.appendChild(heart);
@@ -310,9 +507,16 @@
   vocabFile.addEventListener("change", handleFileUpload);
   sortSelect.addEventListener("change", renderArticles);
   themeToggle.addEventListener("click", toggleTheme);
+  wkImportBtn.addEventListener("click", openWkModal);
+  wkCancelBtn.addEventListener("click", closeWkModal);
+  wkStartBtn.addEventListener("click", importFromWaniKani);
+  wkModal.addEventListener("click", (e) => {
+    if (e.target === wkModal) closeWkModal();
+  });
 
   // Boot
   initTheme();
   loadVocab();
   loadArticles();
+  refreshWaniKaniOnLoad();
 })();
