@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yomeru — Find NHK News Easy Articles You Can Read</title>
+  <meta name="description" content="Yomeru finds NHK News Easy articles matched to your Japanese vocabulary level. Paste your known words or connect WaniKani to discover articles you can actually read.">
+  <meta name="keywords" content="NHK News Easy, NHK簡単ニュース, Japanese reading practice, JLPT reading, WaniKani, Japanese vocabulary, learn Japanese, graded reading, Japanese news, やさしいニュース, 日本語学習, Japanese learner, reading comprehension">
+  <meta name="author" content="Yomeru">
+  <link rel="canonical" href="https://yomerunews.github.io/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://yomerunews.github.io/">
+  <meta property="og:title" content="Yomeru — Find NHK News Easy Articles You Can Read">
+  <meta property="og:description" content="Yomeru finds NHK News Easy articles matched to your Japanese vocabulary level. Paste your known words or connect WaniKani to discover articles you can actually read.">
+  <meta property="og:site_name" content="Yomeru">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Yomeru — NHK News Easy Articles Matched to Your Level">
+  <meta name="twitter:description" content="Find NHK News Easy articles you can actually read based on your known Japanese vocabulary. Supports WaniKani integration.">
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Yomeru",
+    "alternateName": "読める",
+    "url": "https://yomerunews.github.io/",
+    "description": "Find NHK News Easy articles matched to your Japanese vocabulary level. Paste your known words or connect WaniKani to discover articles you can actually read.",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "inLanguage": ["en", "ja"],
+    "keywords": "NHK News Easy, Japanese reading practice, WaniKani, JLPT, Japanese vocabulary, graded reading, learn Japanese",
+    "audience": {
+      "@type": "EducationalAudience",
+      "educationalRole": "student",
+      "audienceType": "Japanese language learners"
+    }
+  }
+  </script>
+
+  <!-- FAQ Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is NHK News Easy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "NHK NEWS WEB EASY is a free service by Japan's public broadcaster that rewrites current news stories in simpler Japanese. Articles use basic kanji with furigana readings, shorter sentences, and common vocabulary — making it one of the best resources for Japanese reading practice at the beginner and intermediate level."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does Yomeru match NHK News Easy articles to my level?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yomeru compares your known vocabulary against the words in each NHK News Easy article. It calculates a comprehension percentage for every article, then ranks them so the easiest ones appear first."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I use my WaniKani vocabulary with NHK News Easy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! Yomeru has built-in WaniKani integration. Click Import from WaniKani, enter your API token, and Yomeru will automatically pull in all the vocabulary and kanji you've learned."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What JLPT levels does Yomeru work for?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "NHK News Easy articles are generally aimed at JLPT N4–N3 level, but Yomeru's vocabulary matching works for any level from N5 to N1. It surfaces the simplest articles first based on your known words."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a free app to read NHK News Easy based on my vocabulary?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yomeru is a free, open-source web app that recommends NHK News Easy articles based on your known Japanese vocabulary. It supports WaniKani import and works on any device with a browser."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <h1>Yomeru <span class="title-jp" lang="ja">読める</span></h1>
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">Dark mode</button>
+    </div>
+    <div class="subtitle-row">
+      <p class="subtitle">NHK News Easy articles you can read</p>
+      <span class="subtitle-sep">·</span>
+      <a class="sponsor-link" href="https://ko-fi.com/pmdov" target="_blank" rel="noopener">♥ Support</a>
+    </div>
+  </header>
+
+  <main>
+    <section id="vocab-section">
+      <h2>Your Vocabulary</h2>
+      <div class="vocab-controls">
+        <textarea id="vocab-input" placeholder="Paste your vocabulary here, one word per line&#10;e.g.&#10;食べる&#10;学校&#10;電車&#10;難しい"></textarea>
+        <div class="vocab-actions">
+          <label class="file-upload-btn">
+            Upload File (.txt, .csv, .tsv)
+            <input type="file" id="vocab-file" accept=".txt,.csv,.tsv" hidden>
+          </label>
+          <button id="wanikani-import" class="btn btn-wanikani">Import from WaniKani</button>
+          <button id="save-vocab" class="btn btn-primary">Save Vocabulary</button>
+          <button id="clear-vocab" class="btn btn-danger">Clear</button>
+        </div>
+        <div id="vocab-status" class="status-badge"></div>
+      </div>
+    </section>
+
+    <section id="articles-section">
+      <h2>Recommended Articles</h2>
+      <div id="sort-controls">
+        <label>Sort by:
+          <select id="sort-select">
+            <option value="easiest">Easiest First</option>
+            <option value="hardest">Hardest First</option>
+            <option value="newest">Newest First</option>
+          </select>
+        </label>
+      </div>
+      <div id="articles-loading" class="loading">Loading articles...</div>
+      <div id="articles-list"></div>
+      <div id="no-vocab-message" class="message" hidden>
+        Add your vocabulary above to see personalized article recommendations.
+      </div>
+      <div id="pagination"></div>
+    </section>
+  </main>
+
+  <section id="how-it-works">
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <div>
+          <h3>Add Your Vocabulary</h3>
+          <p>Paste your known Japanese words, upload a vocabulary file, or connect your <strong>WaniKani</strong> account to automatically import all the kanji and vocabulary you've learned.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <div>
+          <h3>Get Matched Articles</h3>
+          <p>Yomeru analyzes every article from the past year of <strong>NHK News Easy</strong> (NHK NEWS WEB EASY) and calculates how much of each article you can read based on your vocabulary.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <div>
+          <h3>Read at Your Level</h3>
+          <p>Articles are sorted by difficulty so you always have something at the right level — whether you're preparing for <strong>JLPT N5</strong> or <strong>N1</strong>. Build reading confidence with real Japanese news.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <h2>Frequently Asked Questions</h2>
+    <details>
+      <summary>What is NHK News Easy?</summary>
+      <p><a href="https://www3.nhk.or.jp/news/easy/" target="_blank" rel="noopener">NHK NEWS WEB EASY</a> (NHKニュースウェブイージー) is a free service by Japan's public broadcaster that rewrites current news stories in simpler Japanese. Articles use basic kanji with furigana readings, shorter sentences, and common vocabulary — making it one of the best resources for Japanese reading practice at the beginner and intermediate level.</p>
+    </details>
+    <details>
+      <summary>How does Yomeru match articles to my level?</summary>
+      <p>Yomeru compares your known vocabulary against the words in each NHK News Easy article. It calculates a comprehension percentage for every article, then ranks them so the easiest ones (where you know the most words) appear first. This way you always have articles you can read with confidence.</p>
+    </details>
+    <details>
+      <summary>Can I use my WaniKani vocabulary?</summary>
+      <p>Yes! Yomeru has built-in WaniKani integration. Click "Import from WaniKani," enter your API token, and Yomeru will automatically pull in all the vocabulary and kanji you've learned. As you level up on WaniKani, just re-import to update your word list.</p>
+    </details>
+    <details>
+      <summary>What JLPT levels does this work for?</summary>
+      <p>NHK News Easy articles are generally aimed at JLPT N4–N3 level, but Yomeru's matching works for any level. If you're N5 it will surface the simplest articles, and if you're N2 or N1 you'll see that most articles are well within your reach. It's a great way to practice reading at any stage.</p>
+    </details>
+    <details>
+      <summary>Is Yomeru free?</summary>
+      <p>Yes, Yomeru is completely free and open source. Your vocabulary data stays in your browser — nothing is sent to any server. You can optionally <a href="https://ko-fi.com/pmdov" target="_blank" rel="noopener">support the project</a> if you find it useful.</p>
+    </details>
+  </section>
+
+  <footer>
+    <p>Articles sourced from <a href="https://www3.nhk.or.jp/news/easy/" target="_blank" rel="noopener">NHK NEWS WEB EASY</a>. Data updated daily.</p>
+  </footer>
+
+  <div id="wk-modal" class="wk-overlay wk-hidden">
+    <div class="wk-modal">
+      <div class="wk-modal-content">
+        <h3>Import from WaniKani</h3>
+        <div id="wk-key-section">
+          <p>Enter your WaniKani API token. You can generate one at
+            <a href="https://www.wanikani.com/settings/personal_access_tokens" target="_blank" rel="noopener">wanikani.com/settings</a>.</p>
+          <input type="password" id="wk-api-key" placeholder="WaniKani API Token" autocomplete="off">
+          <label class="wk-checkbox-label">
+            <input type="checkbox" id="wk-include-kanji"> Also import kanji
+          </label>
+        </div>
+        <div id="wk-progress-section" hidden>
+          <div class="wk-progress-bar">
+            <div id="wk-progress-fill" class="wk-progress-fill"></div>
+          </div>
+          <p id="wk-progress-text">Starting import...</p>
+        </div>
+        <div id="wk-error" class="wk-error" hidden></div>
+        <div class="wk-modal-actions">
+          <button id="wk-cancel" class="btn">Cancel</button>
+          <button id="wk-start" class="btn btn-primary">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
