@@ -134,12 +134,27 @@
 
     <section id="articles-section">
       <h2>Recommended Articles</h2>
-      <div id="sort-controls">
+      <div id="filter-bar" class="filter-bar">
         <label>Sort by:
           <select id="sort-select">
             <option value="easiest">Easiest First</option>
             <option value="hardest">Hardest First</option>
             <option value="newest">Newest First</option>
+          </select>
+        </label>
+        <label>Difficulty:
+          <select id="difficulty-select">
+            <option value="all">All</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <label>Status:
+          <select id="status-select">
+            <option value="all">All</option>
+            <option value="unread">Unread</option>
+            <option value="read">Read</option>
           </select>
         </label>
       </div>

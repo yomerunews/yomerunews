@@ -7,6 +7,7 @@
   const WK_INCLUDE_KANJI_STORAGE = "ezjp_wk_include_kanji";
   const WK_API_BASE = "https://api.wanikani.com/v2";
   const ARTICLES_URL = "data/articles.json";
+  const READ_STORAGE = "ezjp_read_articles";
 
   // DOM elements
   const vocabInput = document.getElementById("vocab-input");
@@ -19,6 +20,8 @@
   const noVocabMessage = document.getElementById("no-vocab-message");
   const sortSelect = document.getElementById("sort-select");
   const pagination = document.getElementById("pagination");
+  const difficultySelect = document.getElementById("difficulty-select");
+  const statusSelect = document.getElementById("status-select");
 
   const PAGE_SIZE = 20;
   let articles = [];
@@ -26,12 +29,49 @@
   let wkVocab = new Set();      // Words from WaniKani (kept separate)
   let sortedArticles = [];
   let displayCount = PAGE_SIZE;
+  let readArticles = new Set();
 
   /** Combined vocab for scoring (manual + WaniKani) */
   function getAllVocab() {
     const combined = new Set(manualVocab);
     for (const w of wkVocab) combined.add(w);
     return combined;
+  }
+
+  // --- Read Tracking ---
+
+  function loadReadArticles() {
+    const stored = localStorage.getItem(READ_STORAGE);
+    if (stored) {
+      try {
+        readArticles = new Set(JSON.parse(stored));
+      } catch {
+        readArticles = new Set();
+      }
+    }
+  }
+
+  function isArticleRead(id) {
+    return readArticles.has(id);
+  }
+
+  function toggleArticleRead(id) {
+    if (readArticles.has(id)) {
+      readArticles.delete(id);
+    } else {
+      readArticles.add(id);
+    }
+    localStorage.setItem(READ_STORAGE, JSON.stringify([...readArticles]));
+  }
+
+  // --- Filter State ---
+
+  function getActiveDifficulty() {
+    return difficultySelect.value;
+  }
+
+  function getActiveStatus() {
+    return statusSelect.value;
   }
 
   // --- Vocab Management ---
@@ -337,15 +377,31 @@
       sortedArticles = [...articles];
     } else {
       noVocabMessage.hidden = true;
-      sortedArticles = articles.map((a) => ({ ...a, score: scoreArticle(a) }));
+      let scored = articles.map((a) => ({ ...a, score: scoreArticle(a) }));
+
+      // Filter by difficulty
+      const diffLevel = getActiveDifficulty();
+      if (diffLevel !== "all") {
+        scored = scored.filter((a) => getDifficultyClass(a.score) === diffLevel);
+      }
+
       const sortMode = sortSelect.value;
       if (sortMode === "easiest") {
-        sortedArticles.sort((a, b) => b.score - a.score);
+        scored.sort((a, b) => b.score - a.score);
       } else if (sortMode === "hardest") {
-        sortedArticles.sort((a, b) => a.score - b.score);
+        scored.sort((a, b) => a.score - b.score);
       } else {
-        sortedArticles.sort((a, b) => b.date.localeCompare(a.date));
+        scored.sort((a, b) => b.date.localeCompare(a.date));
       }
+      sortedArticles = scored;
+    }
+
+    // Filter by read status (applies with or without vocab)
+    const status = getActiveStatus();
+    if (status === "read") {
+      sortedArticles = sortedArticles.filter((a) => isArticleRead(a.id));
+    } else if (status === "unread") {
+      sortedArticles = sortedArticles.filter((a) => !isArticleRead(a.id));
     }
 
     renderPage();
@@ -376,12 +432,11 @@
   }
 
   function createArticleCard(article, score) {
-    const card = document.createElement("a");
-    card.className = "article-card";
-    card.href = article.url || article.nhkeasier_url;
-    card.target = "_blank";
-    card.rel = "noopener noreferrer";
+    const card = document.createElement("div");
+    const isRead = isArticleRead(article.id);
+    card.className = "article-card" + (isRead ? " article-read" : "");
 
+    const articleUrl = article.url || article.nhkeasier_url;
     const thumbHtml = article.image_url
       ? `<img class="article-thumb" src="${escapeHtml(article.image_url)}" alt="" loading="lazy">`
       : "";
@@ -400,13 +455,27 @@
     }
 
     card.innerHTML = `
-      ${thumbHtml}
-      <div class="article-info">
-        <div class="article-title">${escapeHtml(article.title)}</div>
-        <div class="article-date">${escapeHtml(article.date)}</div>
-        ${difficultyHtml}
-      </div>
+      <a class="article-link" href="${escapeHtml(articleUrl)}" target="_blank" rel="noopener noreferrer">
+        ${thumbHtml}
+        <div class="article-info">
+          <div class="article-title">${escapeHtml(article.title)}</div>
+          <div class="article-date">${escapeHtml(article.date)}</div>
+          ${difficultyHtml}
+        </div>
+      </a>
+      <span class="read-toggle-link">${isRead ? "Mark as unread" : "Mark as read"}</span>
     `;
+
+    // Read toggle click handler
+    const readLink = card.querySelector(".read-toggle-link");
+    readLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleArticleRead(article.id);
+      const nowRead = isArticleRead(article.id);
+      card.classList.toggle("article-read", nowRead);
+      readLink.textContent = nowRead ? "Mark as unread" : "Mark as read";
+    });
 
     return card;
   }
@@ -514,9 +583,14 @@
     if (e.target === wkModal) closeWkModal();
   });
 
+  // Filter listeners
+  difficultySelect.addEventListener("change", renderArticles);
+  statusSelect.addEventListener("change", renderArticles);
+
   // Boot
   initTheme();
   loadVocab();
+  loadReadArticles();
   loadArticles();
   refreshWaniKaniOnLoad();
 })();
